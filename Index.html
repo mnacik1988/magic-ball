@@ -1,0 +1,453 @@
+import { useState, useEffect, useCallback, useRef } from "react";
+
+const RESPONSES = [
+  // Позитивные ответы
+  { text: "Безусловно да!", type: "positive" },
+  { text: "Звёзды говорят — ДА", type: "positive" },
+  { text: "Без сомнений", type: "positive" },
+  { text: "Определённо да", type: "positive" },
+  { text: "Можешь быть уверен", type: "positive" },
+  { text: "Да, именно так", type: "positive" },
+  { text: "Всё сложится наилучшим образом", type: "positive" },
+  { text: "Удача на твоей стороне", type: "positive" },
+  { text: "Вселенная одобряет", type: "positive" },
+  { text: "Это твой шанс — действуй!", type: "positive" },
+  { text: "Впереди тебя ждёт приятный сюрприз", type: "positive" },
+  { text: "Верь в себя — всё получится", type: "positive" },
+  // Нейтральные / советы
+  { text: "Спроси позже", type: "neutral" },
+  { text: "Сейчас нельзя предсказать", type: "neutral" },
+  { text: "Сконцентрируйся и спроси снова", type: "neutral" },
+  { text: "Лучше не рассказывать", type: "neutral" },
+  { text: "Ответ придёт во сне", type: "neutral" },
+  { text: "Подожди — время покажет", type: "neutral" },
+  { text: "Слушай своё сердце", type: "neutral" },
+  { text: "Тебе решать", type: "neutral" },
+  { text: "Загляни внутрь себя", type: "neutral" },
+  { text: "Доверься интуиции", type: "neutral" },
+  // Негативные / предостережения
+  { text: "Мой ответ — нет", type: "negative" },
+  { text: "Даже не думай", type: "negative" },
+  { text: "Весьма сомнительно", type: "negative" },
+  { text: "Не рассчитывай на это", type: "negative" },
+  { text: "Перспективы не очень", type: "negative" },
+  { text: "Звёзды против", type: "negative" },
+  { text: "Сейчас — не лучшее время", type: "negative" },
+  { text: "Остерегайся этого пути", type: "negative" },
+  // Пожелания / мудрости
+  { text: "Будь смелее — мир принадлежит храбрым", type: "wisdom" },
+  { text: "Не бойся перемен", type: "wisdom" },
+  { text: "Улыбнись — и мир улыбнётся тебе", type: "wisdom" },
+  { text: "Каждый день — это подарок", type: "wisdom" },
+  { text: "Ты сильнее, чем думаешь", type: "wisdom" },
+  { text: "Путь в тысячу миль начинается с одного шага", type: "wisdom" },
+  { text: "Сегодня отличный день начать что-то новое", type: "wisdom" },
+  { text: "Счастье ближе, чем кажется", type: "wisdom" },
+];
+
+const TYPE_COLORS = {
+  positive: "#00e676",
+  neutral: "#7c8aff",
+  negative: "#ff5252",
+  wisdom: "#ffd740",
+};
+
+const TYPE_GLOW = {
+  positive: "0 0 40px rgba(0,230,118,0.5)",
+  neutral: "0 0 40px rgba(124,138,255,0.5)",
+  negative: "0 0 40px rgba(255,82,82,0.4)",
+  wisdom: "0 0 40px rgba(255,215,64,0.5)",
+};
+
+export default function MagicBall() {
+  const [response, setResponse] = useState(null);
+  const [isShaking, setIsShaking] = useState(false);
+  const [showAnswer, setShowAnswer] = useState(false);
+  const [permissionGranted, setPermissionGranted] = useState(false);
+  const [tapHint, setTapHint] = useState(true);
+  const lastShake = useRef(0);
+  const prevIndex = useRef(-1);
+
+  const getRandomResponse = useCallback(() => {
+    let idx;
+    do {
+      idx = Math.floor(Math.random() * RESPONSES.length);
+    } while (idx === prevIndex.current && RESPONSES.length > 1);
+    prevIndex.current = idx;
+    return RESPONSES[idx];
+  }, []);
+
+  const triggerPrediction = useCallback(() => {
+    const now = Date.now();
+    if (now - lastShake.current < 2000) return;
+    lastShake.current = now;
+    setTapHint(false);
+    setShowAnswer(false);
+    setIsShaking(true);
+
+    setTimeout(() => {
+      setResponse(getRandomResponse());
+      setIsShaking(false);
+      setShowAnswer(true);
+    }, 1200);
+  }, [getRandomResponse]);
+
+  // Shake detection
+  useEffect(() => {
+    let lastX = 0, lastY = 0, lastZ = 0;
+    let lastUpdate = 0;
+    const SHAKE_THRESHOLD = 25;
+
+    const handleMotion = (e) => {
+      const acc = e.accelerationIncludingGravity;
+      if (!acc) return;
+      const now = Date.now();
+      if (now - lastUpdate < 100) return;
+      const dx = Math.abs(acc.x - lastX);
+      const dy = Math.abs(acc.y - lastY);
+      const dz = Math.abs(acc.z - lastZ);
+      if (dx + dy + dz > SHAKE_THRESHOLD) {
+        triggerPrediction();
+      }
+      lastX = acc.x; lastY = acc.y; lastZ = acc.z;
+      lastUpdate = now;
+    };
+
+    window.addEventListener("devicemotion", handleMotion);
+    return () => window.removeEventListener("devicemotion", handleMotion);
+  }, [triggerPrediction]);
+
+  // Request permission on iOS 13+
+  const requestPermission = async () => {
+    if (typeof DeviceMotionEvent?.requestPermission === "function") {
+      try {
+        const perm = await DeviceMotionEvent.requestPermission();
+        if (perm === "granted") setPermissionGranted(true);
+      } catch { /* fallback to tap */ }
+    } else {
+      setPermissionGranted(true);
+    }
+  };
+
+  useEffect(() => {
+    if (typeof DeviceMotionEvent?.requestPermission !== "function") {
+      setPermissionGranted(true);
+    }
+  }, []);
+
+  const typeColor = response ? TYPE_COLORS[response.type] : "#7c8aff";
+  const typeGlow = response ? TYPE_GLOW[response.type] : "none";
+
+  return (
+    <div style={styles.container} onClick={triggerPrediction}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Cormorant+Garamond:ital,wght@0,400;1,500&display=swap');
+
+        @keyframes float {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-12px); }
+        }
+        @keyframes shake {
+          0%, 100% { transform: rotate(0deg) scale(1); }
+          10% { transform: rotate(-12deg) scale(1.03); }
+          20% { transform: rotate(10deg) scale(0.97); }
+          30% { transform: rotate(-8deg) scale(1.02); }
+          40% { transform: rotate(6deg) scale(0.98); }
+          50% { transform: rotate(-4deg) scale(1.01); }
+          60% { transform: rotate(3deg) scale(1); }
+          70% { transform: rotate(-2deg) scale(1); }
+          80% { transform: rotate(1deg) scale(1); }
+          90% { transform: rotate(0deg) scale(1); }
+        }
+        @keyframes fadeInUp {
+          from { opacity: 0; transform: translateY(18px) scale(0.92); }
+          to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        @keyframes pulse {
+          0%, 100% { opacity: 0.5; }
+          50% { opacity: 1; }
+        }
+        @keyframes starTwinkle {
+          0%, 100% { opacity: 0.2; }
+          50% { opacity: 0.9; }
+        }
+        @keyframes orbiting {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
+
+      {/* Stars background */}
+      <div style={styles.stars}>
+        {Array.from({ length: 50 }).map((_, i) => (
+          <div
+            key={i}
+            style={{
+              position: "absolute",
+              width: Math.random() * 3 + 1,
+              height: Math.random() * 3 + 1,
+              borderRadius: "50%",
+              background: `rgba(${180 + Math.random()*75}, ${180 + Math.random()*75}, 255, ${0.3 + Math.random()*0.7})`,
+              left: `${Math.random() * 100}%`,
+              top: `${Math.random() * 100}%`,
+              animation: `starTwinkle ${2 + Math.random() * 4}s ease-in-out ${Math.random() * 3}s infinite`,
+            }}
+          />
+        ))}
+      </div>
+
+      <h1 style={styles.title}>✦ Магический Шар ✦</h1>
+      <p style={styles.subtitle}>Задай вопрос и тряхни телефон</p>
+
+      {/* The Ball */}
+      <div
+        style={{
+          ...styles.ballOuter,
+          animation: isShaking ? "shake 0.8s ease-in-out" : "float 4s ease-in-out infinite",
+        }}
+      >
+        {/* Orbiting ring */}
+        <div style={styles.orbitRing}>
+          <div style={styles.orbitDot} />
+        </div>
+
+        {/* Ball body */}
+        <div style={styles.ball}>
+          {/* Glossy highlight */}
+          <div style={styles.gloss} />
+
+          {/* Inner window */}
+          <div style={{
+            ...styles.window,
+            boxShadow: showAnswer ? typeGlow : "inset 0 0 30px rgba(0,0,0,0.8)",
+          }}>
+            {showAnswer && response ? (
+              <div style={{
+                animation: "fadeInUp 0.6s ease-out",
+                textAlign: "center",
+                padding: "10px",
+              }}>
+                <div style={{
+                  ...styles.triangle,
+                  borderBottomColor: typeColor,
+                  filter: `drop-shadow(0 0 8px ${typeColor})`,
+                }} />
+                <p style={{
+                  ...styles.answerText,
+                  color: typeColor,
+                  textShadow: `0 0 20px ${typeColor}40`,
+                }}>
+                  {response.text}
+                </p>
+              </div>
+            ) : isShaking ? (
+              <div style={styles.loadingDots}>
+                {[0, 1, 2].map(i => (
+                  <div key={i} style={{
+                    ...styles.dot,
+                    animationDelay: `${i * 0.2}s`,
+                  }} />
+                ))}
+              </div>
+            ) : (
+              <span style={styles.number8}>8</span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Tap hint */}
+      {tapHint && (
+        <p style={styles.hint}>
+          {!permissionGranted ? (
+            <button onClick={(e) => { e.stopPropagation(); requestPermission(); }} style={styles.permBtn}>
+              Разрешить датчик движения
+            </button>
+          ) : (
+            "Тряхни телефон или нажми на шар ✨"
+          )}
+        </p>
+      )}
+
+      {/* Last answer type indicator */}
+      {showAnswer && response && (
+        <div style={{
+          ...styles.badge,
+          background: `${typeColor}20`,
+          borderColor: `${typeColor}40`,
+          color: typeColor,
+          animation: "fadeInUp 0.5s ease-out 0.3s both",
+        }}>
+          {response.type === "positive" ? "🌟 Позитивный ответ" :
+           response.type === "negative" ? "⚡ Предостережение" :
+           response.type === "neutral" ? "🔮 Загадочный ответ" :
+           "💫 Мудрость"}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const styles = {
+  container: {
+    minHeight: "100vh",
+    background: "radial-gradient(ellipse at 50% 20%, #1a1040 0%, #0a0618 50%, #050310 100%)",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    fontFamily: "'Cormorant Garamond', serif",
+    position: "relative",
+    overflow: "hidden",
+    cursor: "pointer",
+    userSelect: "none",
+    padding: "20px",
+  },
+  stars: {
+    position: "absolute",
+    inset: 0,
+    pointerEvents: "none",
+  },
+  title: {
+    fontFamily: "'Cinzel Decorative', serif",
+    fontSize: "clamp(1.4rem, 5vw, 2.2rem)",
+    fontWeight: 900,
+    background: "linear-gradient(135deg, #c9b8ff 0%, #7c8aff 40%, #b39dff 70%, #e8d5ff 100%)",
+    WebkitBackgroundClip: "text",
+    WebkitTextFillColor: "transparent",
+    marginBottom: 4,
+    letterSpacing: "0.05em",
+    textAlign: "center",
+  },
+  subtitle: {
+    color: "#8a80b0",
+    fontSize: "clamp(0.85rem, 3vw, 1.05rem)",
+    fontStyle: "italic",
+    marginTop: 0,
+    marginBottom: 36,
+  },
+  ballOuter: {
+    position: "relative",
+    width: "clamp(240px, 65vw, 320px)",
+    height: "clamp(240px, 65vw, 320px)",
+  },
+  orbitRing: {
+    position: "absolute",
+    inset: "-18px",
+    borderRadius: "50%",
+    border: "1px solid rgba(124,138,255,0.15)",
+    animation: "orbiting 8s linear infinite",
+    pointerEvents: "none",
+  },
+  orbitDot: {
+    position: "absolute",
+    top: 0,
+    left: "50%",
+    transform: "translate(-50%, -50%)",
+    width: 6,
+    height: 6,
+    borderRadius: "50%",
+    background: "#7c8aff",
+    boxShadow: "0 0 12px #7c8aff",
+  },
+  ball: {
+    width: "100%",
+    height: "100%",
+    borderRadius: "50%",
+    background: "radial-gradient(circle at 35% 30%, #2d2255 0%, #151030 45%, #0a0818 80%, #050510 100%)",
+    boxShadow: `
+      0 20px 60px rgba(0,0,0,0.7),
+      inset 0 -8px 30px rgba(0,0,0,0.5),
+      0 0 80px rgba(100,80,200,0.15),
+      0 0 120px rgba(60,40,150,0.1)
+    `,
+    position: "relative",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  gloss: {
+    position: "absolute",
+    top: "8%",
+    left: "18%",
+    width: "35%",
+    height: "25%",
+    borderRadius: "50%",
+    background: "radial-gradient(ellipse, rgba(255,255,255,0.15) 0%, transparent 70%)",
+    transform: "rotate(-20deg)",
+    pointerEvents: "none",
+  },
+  window: {
+    width: "45%",
+    height: "45%",
+    borderRadius: "50%",
+    background: "radial-gradient(circle, #0d0a20 0%, #06041a 100%)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    transition: "box-shadow 0.5s ease",
+    position: "relative",
+  },
+  triangle: {
+    width: 0,
+    height: 0,
+    borderLeft: "12px solid transparent",
+    borderRight: "12px solid transparent",
+    borderBottom: "20px solid #7c8aff",
+    margin: "0 auto 8px",
+  },
+  answerText: {
+    fontFamily: "'Cormorant Garamond', serif",
+    fontSize: "clamp(0.8rem, 2.5vw, 1rem)",
+    fontWeight: 500,
+    fontStyle: "italic",
+    lineHeight: 1.4,
+    margin: 0,
+  },
+  number8: {
+    fontFamily: "'Cinzel Decorative', serif",
+    fontSize: "3rem",
+    fontWeight: 900,
+    color: "#3a2d6e",
+    textShadow: "0 0 20px rgba(100,80,200,0.3)",
+  },
+  loadingDots: {
+    display: "flex",
+    gap: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: "50%",
+    background: "#7c8aff",
+    animation: "pulse 0.6s ease-in-out infinite",
+  },
+  hint: {
+    color: "#6a60a0",
+    fontSize: "0.9rem",
+    marginTop: 40,
+    animation: "pulse 2s ease-in-out infinite",
+    textAlign: "center",
+  },
+  permBtn: {
+    background: "linear-gradient(135deg, #4a3d8f, #6a5acd)",
+    border: "none",
+    color: "#e0d8ff",
+    padding: "10px 24px",
+    borderRadius: 30,
+    fontSize: "0.9rem",
+    fontFamily: "'Cormorant Garamond', serif",
+    cursor: "pointer",
+    boxShadow: "0 4px 20px rgba(100,80,200,0.3)",
+  },
+  badge: {
+    marginTop: 28,
+    padding: "8px 20px",
+    borderRadius: 20,
+    border: "1px solid",
+    fontSize: "0.85rem",
+    fontStyle: "italic",
+  },
+};
